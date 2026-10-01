@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "irmy-common"
+version = "1.0.0"
+description = "Common building blocks for IRMy Python services: config, logging, Redis client, JWT auth and FastAPI error handling"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Vitalii Bendyna", email = "info@irmy.tech" }]
+keywords = ["irmy", "fastapi", "config", "jwt", "redis", "logging", "prometheus"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "fastapi>=0.141.1,<1",
+    "starlette>=1.3.1,<2",
+    "PyJWT[crypto]>=2.13.0,<3",
+    "cryptography>=50.0.0",
+    "pydantic>=2.13.5,<3",
+    "httpx>=0.28.1,<1",
+    "PyYAML>=6.0.3,<7",
+    "redis>=7.4.1,<8",
+    "prometheus-client>=0.26.0,<1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.setuptools.packages.find]
+include = ["irmy_common*"]
+
+[tool.setuptools.package-data]
+irmy_common = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
