@@ -1,5 +1,6 @@
 from enum import IntEnum
 
+from .openapi import error_responses
 
 class ApiResponseCodes(IntEnum):
     CREATE        = 201
@@ -13,30 +14,26 @@ class ApiErrorCodes(IntEnum):
     NOT_FOUND             = 404
     CONFLICT              = 409
     INTERNAL_SERVER_ERROR = 500
+    BAD_GATEWAY           = 502
     SERVICE_UNAVAILABLE   = 503
+    GATEWAY_TIMEOUT       = 504
 
 
-COMMON_RESPONSES = {
-    401: {"description": "Invalid or expired token"},
-    403: {"description": "Insufficient permissions"},
-    404: {"description": "Not found"},
-    500: {"description": "Internal server error"},
-}
+# Legacy: these may declare codes an endpoint never returns. New endpoints declare
+# exactly their own codes with `irmy_common.openapi.error_responses`.
+COMMON_RESPONSES = error_responses(401, 403, 404, 500)
 
 COMMON_CREATE_RESPONSES = {
     201: {"description": "Created"},
-    400: {"description": "Validation error"},
-    409: {"description": "Conflict"}
+    **error_responses(400, 409),
 }
 
 COMMON_UPDATE_RESPONSES = {
     204: {"description": "Success"},
-    400: {"description": "Validation error"},
-    404: {"description": "Not found"},
-    409: {"description": "Conflict"}
+    **error_responses(400, 404, 409),
 }
 
 COMMON_DELETE_RESPONSES = {
     204: {"description": "Success"},
-    404: {"description": "Not found"}
+    **error_responses(404),
 }

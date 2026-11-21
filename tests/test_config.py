@@ -71,7 +71,7 @@ def test_credentials_are_url_encoded(config_env):
     config = Config()
     assert config.get_postgres_url() == "postgresql+asyncpg://svc:p%40ss%3Aw%2Frd%23%3F@pg:5432/irmy"
     assert config.get_postgres_url(synchronous=True).startswith("postgresql://svc:p%40ss")
-    assert config.get_rabbit_url() == "amqp://rab%40bit:x%2Fy@rabbit:5672/"
+    assert config.get_rabbit_url() == "amqp://rab%40bit:x%2Fy@rabbit:5672/%2F"
 
 
 def test_rabbit_vhost_in_url(config_env, monkeypatch):
@@ -106,19 +106,114 @@ def test_dependencies_property_removed(config_env):
     assert not hasattr(Config(), "dependencies")
 
 
-@pytest.mark.parametrize("vhost", ["dev", "Team_1", ""])
-def test_vhost_valid(config_env, monkeypatch, vhost):
-    monkeypatch.setenv("RABBITMQ_VHOST", vhost)
-    assert Config().get_rabbit_url().endswith(f":5672/{vhost}")
+# Same cases as SharedConfigurationTests in Irmy.Configuration: both libraries must read the vhost alike.
+@pytest.mark.parametrize(
+    "yaml_line, env_value, expected_vhost, expected_path",
+    [
+        ('rabbitmqVHost: dev', None, "dev", "dev"),
+        ('rabbitmqVHost: dev', "", "dev", "dev"),
+        ('rabbitmqVHost: dev', "qa", "qa", "qa"),
+        ('rabbitmqVHost: /dev', None, "/dev", "%2Fdev"),
+        ('rabbitmqVHost: dev', "/dev", "/dev", "%2Fdev"),
+        ('rabbitmqVHost: /', None, "/", "%2F"),
+        ('rabbitmqVHost: a/b', None, "a/b", "a%2Fb"),
+        ('rabbitmqVHost: irmy-dev.v1', None, "irmy-dev.v1", "irmy-dev.v1"),
+        ('rabbitmqVHost: ""', "dev", "dev", "dev"),
+        ('', None, "/", "%2F"),
+        ('', "", "/", "%2F"),
+    ],
+)
+def test_vhost_used_as_given(config_env, monkeypatch, yaml_line, env_value, expected_vhost, expected_path):
+    config_env.write_yaml(BASE_YAML.replace('rabbitmqVHost: "/"\n', f"{yaml_line}\n"))
+    if env_value is not None:
+        monkeypatch.setenv("RABBITMQ_VHOST", env_value)
+    config = Config()
+    assert config._config.rabbitmqVHost == expected_vhost
+    assert config.get_rabbit_url() == f"amqp://rabbit:5672/{expected_path}"
 
 
-@pytest.mark.parametrize("vhost", ["a/b", "my-vhost", "v host", "v.h"])
-def test_vhost_invalid(config_env, monkeypatch, vhost):
-    monkeypatch.setenv("RABBITMQ_VHOST", vhost)
-    with pytest.raises(ValidationError, match="rabbitmqVHost"):
+def test_vhost_other_spelling_is_not_read(config_env):
+    config_env.write_yaml(BASE_YAML.replace('rabbitmqVHost: "/"\n', "rabbitmqVhost: dev\n"))
+    assert Config()._config.rabbitmqVHost == "/"
+
+
+@pytest.mark.parametrize(
+    "yaml_line, env_value",
+    [('rabbitmqVHost: ""', None), ('rabbitmqVHost: ""', ""), ("rabbitmqVHost:", None)],
+)
+def test_vhost_empty_rejected(config_env, monkeypatch, yaml_line, env_value):
+    config_env.write_yaml(BASE_YAML.replace('rabbitmqVHost: "/"\n', f"{yaml_line}\n"))
+    if env_value is not None:
+        monkeypatch.setenv("RABBITMQ_VHOST", env_value)
+    with pytest.raises(ValidationError, match="vhost .* must not be empty"):
+        Config()
+
+
+@pytest.mark.parametrize(
+    "yaml_line, env_value",
+    [
+        ('rabbitmqVHost: " dev"', None),
+        ('rabbitmqVHost: "dev "', None),
+        ('rabbitmqVHost: "\\tdev"', None),
+        ("rabbitmqVHost: dev", " dev"),
+        ("rabbitmqVHost: dev", "dev "),
+        ("rabbitmqVHost: dev", "   "),
+    ],
+)
+def test_vhost_surrounding_whitespace_rejected(config_env, monkeypatch, yaml_line, env_value):
+    config_env.write_yaml(BASE_YAML.replace('rabbitmqVHost: "/"\n', f"{yaml_line}\n"))
+    if env_value is not None:
+        monkeypatch.setenv("RABBITMQ_VHOST", env_value)
+    with pytest.raises(ValidationError, match="must not start or end with whitespace"):
         Config()
 
 
 def test_secrets_location_default(config_env, monkeypatch):
     monkeypatch.delenv("SECRETS_LOCATION")
     assert Config()._secrets_path == "/var/run"
+
+
+def test_garbage_collection_defaults_to_disabled_without_block(config_env):
+    gc = Config().garbage_collection
+    assert gc.enabled is False
+    assert gc.schedule == "0 3 * * *"
+    assert gc.retentionMonths.alerts is None
+
+
+def test_garbage_collection_reads_block(config_env):
+    config_env.write_yaml(BASE_YAML + """\
+garbageCollection:
+  enabled: true
+  schedule: "30 2 * * *"
+  batchSize: 1000
+  maxDurationMinutes: 10
+  retentionMonths:
+    alerts: 6
+    auditLog: 24
+""")
+    gc = Config().garbage_collection
+    assert gc.enabled is True
+    assert gc.schedule == "30 2 * * *"
+    assert gc.batchSize == 1000
+    assert gc.maxDurationMinutes == 10
+    assert gc.retentionMonths.alerts == 6
+    assert gc.retentionMonths.auditLog == 24
+    assert gc.retentionMonths.incidents is None
+    assert gc.retentionMonths.onCall is None
+
+
+def test_garbage_collection_empty_block_is_disabled(config_env):
+    config_env.write_yaml(BASE_YAML + "garbageCollection:\n")
+    assert Config().garbage_collection.enabled is False
+
+
+@pytest.mark.parametrize("block", [
+    "garbageCollection:\n  schedule: \"0 3 * *\"\n",
+    "garbageCollection:\n  batchSize: 10\n",
+    "garbageCollection:\n  maxDurationMinutes: 30\n",
+    "garbageCollection:\n  retentionMonths:\n    alerts: 0\n",
+])
+def test_garbage_collection_is_validated(config_env, block):
+    config_env.write_yaml(BASE_YAML + block)
+    with pytest.raises(ValidationError, match="garbageCollection"):
+        Config()

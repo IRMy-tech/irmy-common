@@ -5,7 +5,36 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 _VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 _EXCHANGE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
-_VHOST_PATTERN = re.compile(r"^[A-Za-z0-9_]*$")
+
+
+class GarbageCollectionRetention(BaseModel):
+    """How many months of each kind of data to keep. A missing key means that kind
+    of data is never purged."""
+
+    alerts: Optional[int] = Field(None, ge=1)
+    incidents: Optional[int] = Field(None, ge=1)
+    auditLog: Optional[int] = Field(None, ge=1)
+    onCall: Optional[int] = Field(None, ge=1)
+
+
+class GarbageCollectionConfig(BaseModel):
+    """The ``garbageCollection`` block of global_config.yaml. Read from the file only --
+    environment variables do not override it. No block means disabled."""
+
+    enabled: bool = False
+    # Cron, 5 fields, evaluated in UTC by scheduler.
+    schedule: str = "0 3 * * *"
+    batchSize: int = Field(5000, ge=100, le=50000)
+    # Below RabbitMQ's default consumer_timeout (30 min): the run holds its message unacked.
+    maxDurationMinutes: int = Field(20, ge=1, le=25)
+    retentionMonths: GarbageCollectionRetention = Field(default_factory=GarbageCollectionRetention)
+
+    @field_validator("schedule")
+    @classmethod
+    def validate_schedule(cls, value: str) -> str:
+        if len(value.split()) != 5:
+            raise ValueError(f"garbageCollection.schedule must be a 5-field cron expression, got '{value}'")
+        return value
 
 
 class ConfigSchema(BaseModel):
@@ -23,6 +52,7 @@ class ConfigSchema(BaseModel):
     rabbitmqExchangeName: str
     redisHost: str
     redisPort: int = Field(ge=1, le=65535)
+    garbageCollection: Optional[GarbageCollectionConfig] = None
 
     # Secrets
     encryptionKey: Optional[str] = None
@@ -44,12 +74,17 @@ class ConfigSchema(BaseModel):
     serviceVersion: str
 
 
-    @field_validator("rabbitmqVHost")
+    @field_validator("rabbitmqVHost", mode="before")
     @classmethod
-    def validate_vhost(cls, value: str):
-        if not _VHOST_PATTERN.match(value):
+    def validate_vhost(cls, value):
+        # Used as given ("dev" and "/dev" are different vhosts), the same rules as Irmy.Configuration.
+        if value is None or value == "":
             raise ValueError(
-                f"RabbitMQ Vhost may contain only letters, digits and underscores, got '{value}'"
+                'RabbitMQ vhost (rabbitmqVHost / RABBITMQ_VHOST) must not be empty. Use "/" for the default vhost.'
+            )
+        if isinstance(value, str) and (value[0].isspace() or value[-1].isspace()):
+            raise ValueError(
+                f"RabbitMQ vhost (rabbitmqVHost / RABBITMQ_VHOST) must not start or end with whitespace, got '{value}'."
             )
         return value
 

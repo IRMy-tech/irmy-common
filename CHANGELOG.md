@@ -1,4 +1,49 @@
 # Changelog
+## 1.5.0
+* `RedisClient` gives up on an unreachable Redis instead of hanging: connecting and every
+  command time out after 2 s (`socket_connect_timeout` / `socket_timeout`, overridable in the
+  constructor). Before, a Redis host that did not answer (a dead node, a network partition)
+  blocked every call — and with it JWT checks and health checks — for the OS TCP timeout.
+  A failed call still returns `None` (`stream_add`: `False`, `healthcheck`: `False`).
+* `ApiErrorCodes.BAD_GATEWAY` (502) and `ApiErrorCodes.GATEWAY_TIMEOUT` (504);
+  `error_responses()` accepts 502 and 504.
+* `Release.txt` matches the package version again (it still said 1.3.0 in 1.4.0).
+
+## 1.4.0
+* `Config.garbage_collection` (`GarbageCollectionConfig`): the optional `garbageCollection`
+  block of `global_config.yaml` — `enabled`, `schedule` (5-field cron, UTC), `batchSize`,
+  `maxDurationMinutes`, `retentionMonths.{alerts,incidents,auditLog,onCall}`. Read from the
+  file only, no env overrides; no block = disabled.
+
+## 1.3.0
+* RabbitMQ vhost: the default is `/` (was `""`) and any vhost name is accepted, as given —
+  `dev` and `/dev` are different vhosts; `get_rabbit_url()` percent-encodes it (`/` → `%2F`).
+  The rule "letters, digits and underscores only" is removed, so the chart default `/`, and
+  names such as `irmy-dev`, no longer fail validation.
+* The vhost is required: an empty value (`rabbitmqVHost: ""` or an empty key) or one that
+  starts or ends with whitespace fails validation, with a message naming
+  `rabbitmqVHost / RABBITMQ_VHOST`. An empty `RABBITMQ_VHOST` counts as not set, and the
+  value is no longer stripped.
+* Same rules as `Irmy.Configuration` 1.1.0.
+
+## 1.2.0
+* `RedisClient.stream_add(batches)` — append to Redis streams in one `MULTI`/`EXEC` round trip,
+  each `StreamBatch` trimmed to `max_len` entries (exact `MAXLEN`) and, optionally, to entries newer
+  than `min_id` (`XTRIM MINID`). Returns False instead of raising when Redis fails again after
+  reconnecting, so the caller can keep its entries.
+* `RedisClient.stream_range(key, start, end, count, reverse)` — `XRANGE` / `XREVRANGE`.
+
+## 1.1.0
+* `openapi` — documentation helpers for the "API documentation (OpenAPI)" standard:
+  `ErrorResponse` / `ValidationErrorResponse` body models, `error_responses(*codes)`
+  for an endpoint's exact error codes (schema, description, example), and
+  `configure_openapi(app)`, which removes FastAPI's auto-generated 422 response.
+* `validation` — constrained request types per "User input validation", trimmed
+  before validation: `name_str()`, `text_str()`, `key_str()`, `Tags`, `TimeZoneName`.
+* `COMMON_*` responses in `response_codes` now carry the error body schema and an
+  example (descriptions unchanged). They are legacy: prefer `error_responses`.
+* `CreateResourceModel` / `CreateManyResourcesModel` fields have descriptions and examples.
+
 ## 1.0.0
 Initial release.
 

@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse, Response
 
 from .exceptions import IrmyException, IrmyHTTPException
@@ -8,11 +8,13 @@ from .response_codes import ApiResponseCodes, ApiErrorCodes
 
 
 class CreateResourceModel(BaseModel):
-    id: UUID
+    id: UUID = Field(description="ID of the created resource",
+                     examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"])
 
 
 class CreateManyResourcesModel(BaseModel):
-    ids: List[UUID]
+    ids: List[UUID] = Field(description="IDs of the created resources",
+                            examples=[["3fa85f64-5717-4562-b3fc-2c963f66afa6"]])
 
 
 def basic_http_response(response_code: ApiResponseCodes, resource_id: UUID | None = None, many_resource_ids: List[UUID] | None = None):

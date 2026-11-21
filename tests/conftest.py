@@ -11,7 +11,7 @@ postgreSQLDatabaseName: irmy
 postgreSQLSchemaName: public
 rabbitmqHost: rabbit
 rabbitmqPort: 5672
-rabbitmqVHost: ""
+rabbitmqVHost: "/"
 rabbitmqExchangeName: irmy
 redisHost: redis
 redisPort: 6379

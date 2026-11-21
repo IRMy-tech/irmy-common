@@ -3,7 +3,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import yaml
-from ._models import ConfigSchema
+from ._models import ConfigSchema, GarbageCollectionConfig
 
 
 class Config:
@@ -23,10 +23,12 @@ class Config:
             postgreSQLSchemaName=self._get_env("POSTGRESQL_SCHEMA", self._yaml_config.get("postgreSQLSchemaName", "public")),
             rabbitmqHost=self._get_env("RABBITMQ_HOST", self._yaml_config.get("rabbitmqHost")),
             rabbitmqPort=self._get_env("RABBITMQ_PORT", self._yaml_config.get("rabbitmqPort", 5672)),
-            rabbitmqVHost=self._get_env("RABBITMQ_VHOST", self._yaml_config.get("rabbitmqVHost", "")),
+            rabbitmqVHost=self._get_rabbit_vhost(),
             rabbitmqExchangeName=self._get_env("RABBITMQ_EXCHANGE_NAME", self._yaml_config.get("rabbitmqExchangeName")),
             redisHost=self._get_env("REDIS_HOST", self._yaml_config.get("redisHost")),
             redisPort=self._get_env("REDIS_PORT", self._yaml_config.get("redisPort", 6379)),
+            # File only: no environment variable overrides this block.
+            garbageCollection=self._yaml_config.get("garbageCollection"),
             postgreSQLUser=self._get_env("POSTGRESQL_USER", self._read_secret("postgreSQLUser")),
             postgreSQLPassword=self._get_env("POSTGRESQL_PASSWORD", self._read_secret("postgreSQLPassword")),
             rabbitUser=self._get_env("RABBITMQ_USER", self._read_secret("rabbitUser")),
@@ -48,6 +50,14 @@ class Config:
     def _get_env(key: str, default=None) -> str | None:
         value = os.getenv(key, default)
         return value.strip() if isinstance(value, str) else value
+
+    def _get_rabbit_vhost(self):
+        # An empty RABBITMQ_VHOST counts as not set. The value is not stripped:
+        # surrounding whitespace is rejected by the schema instead.
+        value = os.getenv("RABBITMQ_VHOST")
+        if value:
+            return value
+        return self._yaml_config.get("rabbitmqVHost", "/")
 
     @staticmethod
     def _read_yaml_file(config_file_location: str) -> dict:
@@ -140,6 +150,11 @@ class Config:
     @property
     def chart_version(self) -> str | None:
         return self._config.chartVersion
+
+    @property
+    def garbage_collection(self) -> GarbageCollectionConfig:
+        """The ``garbageCollection`` block; disabled defaults when the file has none."""
+        return self._config.garbageCollection or GarbageCollectionConfig()
 
     @staticmethod
     def _credentials(user: str | None, password: str | None) -> str:
