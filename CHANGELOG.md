@@ -1,4 +1,18 @@
 # Changelog
+## 1.6.1
+* `[project.urls]` in `pyproject.toml`: the package metadata links to the home page, the
+  documentation, the source, the issue tracker and the changelog (the "Project links" of the
+  package page on PyPI).
+
+## 1.6.0
+* `validation.storable_text(value)` / `validation.storable(value)`: NUL (`\u0000`) and lone
+  UTF-16 surrogates (`\ud800`..`\udfff`), which PostgreSQL cannot store, are replaced by their
+  escape written out as text (the six characters `\u0000`). `storable` walks a JSON-like value
+  (dicts — keys included — lists, strings).
+* `text_str` applies `storable_text` before trimming and the length check: such a value is
+  saved with the escape text instead of reaching the database as is. The escape counts towards
+  the length limit.
+
 ## 1.5.0
 * `RedisClient` gives up on an unreachable Redis instead of hanging: connecting and every
   command time out after 2 s (`socket_connect_timeout` / `socket_timeout`, overridable in the

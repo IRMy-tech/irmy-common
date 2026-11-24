@@ -70,3 +70,41 @@ def test_violation_is_a_400_with_details():
     assert response.status_code == 400
     assert response.json() == {"error": "Validation failed",
                                "details": [{"field": "name", "message": "String should have at least 1 character"}]}
+
+
+class TextModel(BaseModel):
+    text: text_str(32)
+    tags: Tags | None = None
+
+
+def test_nul_and_lone_surrogates_are_stored_as_escape_text():
+    assert TextModel(text="x\x00y").text == "x\\u0000y"
+    assert TextModel(text="a", tags={"k": "\ud800"}).tags == {"k": "\\ud800"}
+
+
+def test_escape_text_counts_in_the_length():
+    with pytest.raises(ValidationError):
+        Model(name="a", description="\x00")          # 6 characters once written out, limit is 5
+
+
+def test_storable_walks_json_like_values():
+    from irmy_common.validation import storable
+    body = {"a\x00": ["b\x00", 1, None, {"c": "\udfff"}], "n": 2.5, "ok": "plain é \U0001F600"}
+    assert storable(body) == {"a\\u0000": ["b\\u0000", 1, None, {"c": "\\udfff"}], "n": 2.5,
+                              "ok": "plain é \U0001F600"}
+    for value in storable(body).values():
+        str(value).encode("utf-8")                   # everything is UTF-8 encodable now
+
+
+def test_storable_text_through_the_api_is_saved_not_rejected():
+    app = FastAPI()
+    register_exceptions_handler(app)
+
+    @app.post("/things")
+    async def create(body: TextModel):
+        return {"text": body.text}
+
+    response = TestClient(app).post("/things", content='{"text": "a\\u0000b"}',
+                                    headers={"content-type": "application/json"})
+    assert response.status_code == 200
+    assert response.json() == {"text": "a\\u0000b"}

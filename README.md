@@ -265,10 +265,22 @@ class CreateServiceRequest(BaseModel):
 | Type | Rule |
 |---|---|
 | `name_str(n)` | `A-Za-z0-9_-` and spaces, 1..n characters |
-| `text_str(n, required=False)` | any characters, up to n (at least 1 if `required`) |
+| `text_str(n, required=False)` | any characters, up to n (at least 1 if `required`); NUL and lone surrogates are written out as `\u0000` text |
 | `key_str(n=64)` | `A-Za-z0-9_-`, 1..n characters |
 | `Tags` | up to 10 entries, `key_str(64)` keys, `text_str(256)` values |
 | `TimeZoneName` | a valid IANA time zone name |
+
+PostgreSQL cannot store NUL (`\u0000`) or a lone UTF-16 surrogate (`\ud800`..`\udfff`).
+`storable_text(value)` replaces each with its escape written out as text (`"a\x00b"` →
+`"a\\u0000b"`), so the value is saved and shows what was sent; `storable(value)` does the
+same for every string of a JSON-like value, dict keys included. `text_str` applies it before
+trimming and the length check.
+
+```python
+from irmy_common.validation import storable
+
+body = storable(json.loads(raw))   # webhook body / event payload, ready for the database
+```
 
 ### Metrics
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "irmy-common"
-version = "1.5.0"
+version = "1.6.1"
 description = "Common building blocks for IRMy Python services: config, logging, Redis client, JWT auth and FastAPI error handling"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -34,6 +34,13 @@ dependencies = [
     "redis>=7.4.1,<8",
     "prometheus-client>=0.26.0,<1",
 ]
+
+[project.urls]
+Homepage = "https://irmy.tech"
+Documentation = "https://irmy.tech/docs/"
+Source = "https://github.com/IRMy-tech/irmy-common"
+Issues = "https://github.com/IRMy-tech/irmy-common/issues"
+Changelog = "https://github.com/IRMy-tech/irmy-common/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = [
